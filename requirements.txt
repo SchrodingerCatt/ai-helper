@@ -1,0 +1,14 @@
+# requirements.txt
+fastapi
+uvicorn
+requests
+pydantic
+pypdf
+python-dotenv
+langchain-core
+langchain-google-genai
+langchain-community
+# ChromaDB-ისთვის საჭირო დამოკიდებულებები (თუ არ ჩაიტვირთება, შესაძლოა დაგჭირდეთ)
+# pydantic<2
+# pydantic_settings
+# httpx
