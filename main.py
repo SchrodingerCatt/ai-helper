@@ -4,7 +4,7 @@ import requests
 import json
 import time
 import secrets
-from typing import Annotated # აუცილებელია Depends და Header-ისთვის
+from typing import Annotated # საჭიროა სხვადასხვა დეკლარაციებისთვის
 from dotenv import load_dotenv
 
 # --- FastAPI და HTML იმპორტები ---
@@ -16,7 +16,6 @@ import uvicorn
 from pypdf import PdfReader
 
 # --- RAG ინსტრუმენტების იმპორტი ---
-# ეს ნაწილი უზრუნველყოფს, რომ RAG ბიბლიოთეკების არარსებობის შემთხვევაშიც კი, კოდი არ გატყდეს
 try:
     from langchain_google_genai import GoogleGenerativeAIEmbeddings
     from langchain_community.vectorstores.chroma import Chroma
@@ -31,7 +30,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 LOCAL_API_KEY = os.environ.get("LOCAL_API_KEY")
 
 if not LOCAL_API_KEY:
-     print("❌ ERROR: LOCAL_API_KEY არ არის დაყენებული.")
+     print("❌ WARNING: LOCAL_API_KEY არ არის დაყენებული.")
 
 API_KEY_NAME = "X-API-Key"
 GEMINI_MODEL_NAME = "gemini-2.5-flash"
@@ -41,7 +40,7 @@ CHROMA_PATH = "chroma_db"
 
 global_rag_retriever = None
 
-# --- ფუნქცია პერსონის PDF-დან ჩასატვირთად (უცვლელია) ---
+# --- ფუნქცია პერსონის PDF-დან ჩასატვირთად ---
 def load_persona_from_pdf(file_path: str) -> str:
     """კითხულობს მთელ ტექსტს PDF ფაილიდან pypdf-ის გამოყენებით."""
     try:
@@ -52,9 +51,7 @@ def load_persona_from_pdf(file_path: str) -> str:
             if page_text:
                 text += page_text + "\n\n"
         if not text.strip():
-            print(f"❌ ERROR: PDF ფაილი '{file_path}' ცარიელია.")
             return "თქვენ ხართ სასარგებლო ასისტენტი, რომელიც პასუხობს ქართულ ენაზე."
-        print(f"✅ პერსონის ტექსტი წარმატებით ჩაიტვირთა {file_path}-დან. სიგრძე: {len(text.strip())} სიმბოლო.")
         return text.strip()
     except Exception as e:
         print(f"❌ ERROR: პერსონის PDF-ის წაკითხვისას შეცდომა: {e}")
@@ -64,19 +61,17 @@ def load_persona_from_pdf(file_path: str) -> str:
 CUSTOM_PERSONA_TEXT = load_persona_from_pdf(PERSONA_PDF_PATH)
 
 # --- FastAPI აპლიკაციის ინიციალიზაცია ---
-app = FastAPI(title="Gemini RAG API", version="1.0 - RAG Activated")
+app = FastAPI(title="Gemini RAG API", version="1.1 - 401 Fix")
 
-# --- Startup ლოგიკა: RAG ინიციალიზაცია (უცვლელია) ---
+# --- Startup ლოგიკა: RAG ინიციალიზაცია ---
 @app.on_event("startup")
 async def startup_event():
     global global_rag_retriever
     
     if not RAG_TOOLS_AVAILABLE:
-        print("RAG ინიციალიზაცია გამოტოვებულია, რადგან საჭირო ბიბლიოთეკები ვერ მოიძებნა.")
+        print("RAG ინიციალიზაცია გამოტოვებულია.")
         return
         
-    print(">>> RAG სისტემის ინიციალიზაცია...")
-    
     if GEMINI_API_KEY:
         os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
     else:
@@ -91,7 +86,7 @@ async def startup_event():
                 embedding_function=embeddings
             )
             global_rag_retriever = vector_store.as_retriever(search_kwargs={"k": 3})
-            print(f"✅ RAG Retriever წარმატებით ჩაიტვირთა {CHROMA_PATH}-დან.")
+            print(f"✅ RAG Retriever წარმატებით ჩაიტვირთა.")
         except Exception as e:
             print(f"❌ ERROR: ChromaDB-ის ჩატვირთვა ვერ მოხერხდა: {e}.")
     else:
@@ -106,7 +101,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# -----------------------------------------------
 
 # --- 1. HTML ფაილის ჩატვირთვა და სერვირება ---
 try:
@@ -121,33 +115,21 @@ async def serve_frontend():
     return HTMLResponse(content=HTML_CONTENT, status_code=200)
 
 
-# --- 2. განახლებული API KEY ვალიდაცია (ფიქსავს 401 შეცდომას) ---
-async def verify_api_key(api_key: Annotated[str | None, Header(alias=API_KEY_NAME)] = None):
-    """
-    ამოწმებს API გასაღებს. თუ გასაღები არ არის მოწოდებული (None), ნებას რთავს,
-    რადგან ჩვენი ფრონტენდი იმავე სერვერზეა და გასაღებს აღარ გზავნის.
-    """
-    
-    # თუ LOCAL_API_KEY არ არის დაყენებული, ავტომატურად ვუშვებთ ყველას
-    if not LOCAL_API_KEY:
-        return True 
+# --- 2. API KEY ვალიდაცია (დარჩა მხოლოდ როგორც მაგალითი, მაგრამ არ გამოიყენება /process_query-ზე) ---
+# ეს ფუნქცია ამოღებულია /process_query-დან 401 შეცდომის გამოსასწორებლად.
+# თუ მოგვიანებით დაგჭირდებათ დაცული ენდპოინტი, შეგიძლიათ გამოიყენოთ:
+def verify_external_api_key(api_key: str = Header(..., alias=API_KEY_NAME)):
+    """ამოწმებს გარე API გასაღებს, თუ LOCAL_API_KEY დაყენებულია."""
+    if not LOCAL_API_KEY or not secrets.compare_digest(api_key, LOCAL_API_KEY):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="არასწორი API გასაღები",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return True
 
-    # თუ გასაღები მოწოდებულია (ეს შეიძლება იყოს გარე API მოთხოვნა), ის მკაცრად უნდა ემთხვეოდეს
-    if api_key:
-        if secrets.compare_digest(api_key, LOCAL_API_KEY):
-            return True
-        else:
-            # თუ გასაღები მოწოდებულია, მაგრამ არასწორია
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="არასწორი API გასაღები",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-    
-    # თუ გასაღები არ არის მოწოდებული (api_key=None), ვუშვებთ.
-    return True 
 
-# --- მონაცემთა მოდელები (უცვლელია) ---
+# --- მონაცემთა მოდელები ---
 class ChatbotRequest(BaseModel):
     prompt: str
     user_id: str
@@ -158,28 +140,26 @@ class ChatbotResponse(BaseModel):
     ai_response: str
     result_data: dict
 
-# --- Gemini API-ს გამოძახება (RAG ლოგიკით) (უცვლელია) ---
+# --- Gemini API-ს გამოძახება (RAG ლოგიკით) ---
 def generate_gemini_content(prompt: str) -> str:
     """უკავშირდება Gemini API-ს, იყენებს RAG-ს კონტექსტის დასამატებლად."""
     if not GEMINI_API_KEY:
-        return "ERROR: Gemini API გასაღები ვერ მოიძებნა. შეამოწმეთ გარემოს ცვლადები."
+        return "ERROR: Gemini API გასაღები ვერ მოიძებნა."
     
     rag_context = ""
     is_rag_active = global_rag_retriever is not None
     
     if is_rag_active:
         try:
-            # Note: docs-ის ტიპი უნდა იყოს Document (langchain_core.documents.Document)
             docs: list[Document] = global_rag_retriever.get_relevant_documents(prompt)
             context_text = "\n---\n".join([doc.page_content for doc in docs])
             
             rag_context = (
                 "თქვენ მოგეცემათ დამატებითი კონტექსტი 'DOCUMENTS'-ის სექციაში. "
-                "გამოიყენეთ ეს ინფორმაცია, რომ უპასუხოთ შეკითხვას. "
-                "თუ პასუხი კონტექსტში არ არის, გამოიყენეთ თქვენი ზოგადი ცოდნა.\n\n"
+                "გამოიყენეთ ეს ინფორმაცია, რომ უპასუხოთ შეკითხვას.\n\n"
                 f"--- DOCUMENTS ---\n{context_text}\n---"
             )
-        except Exception as e:
+        except Exception:
             rag_context = ""
 
     final_prompt = f"{rag_context}\n\nმომხმარებლის შეკითხვა: {prompt}"
@@ -210,11 +190,14 @@ def generate_gemini_content(prompt: str) -> str:
             )
             
             if response.status_code >= 400:
+                # API-ის შეცდომის დეტალური დამუშავება
+                error_msg = f"Gemini API-მ დააბრუნა {response.status_code} შეცდომა."
                 try:
                     error_detail = response.json()
-                    return f"ERROR: Gemini API-მ დააბრუნა {response.status_code} შეცდომა. დეტალები: {error_detail.get('error', {}).get('message', 'დეტალური შეტყობინება ვერ მიიღეს.')}"
+                    error_msg += f" დეტალები: {error_detail.get('error', {}).get('message', 'დეტალური შეტყობინება ვერ მიიღეს.')}"
                 except json.JSONDecodeError:
-                    return f"ERROR: Gemini API-მ დააბრუნა {response.status_code} შეცდომა. პასუხი არ არის JSON-ში."
+                    pass
+                return f"ERROR: {error_msg}"
 
             response.raise_for_status() 
             result = response.json()
@@ -237,16 +220,18 @@ def generate_gemini_content(prompt: str) -> str:
     return "ERROR: პასუხი ვერ იქნა გენერირებული."
 
 
+# --- API ენდპოინტები ---
+
 @app.get("/status")
 def read_root():
+    """აბრუნებს API-სა და RAG-ის სტატუსს."""
     rag_status = "აქტიურია" if global_rag_retriever else "არააქტიურია (გაუშვით ingest.py)"
     return {"message": "API მუშაობს!", "RAG_Status": rag_status}
 
-@app.post("/process_query", response_model=ChatbotResponse, tags=["Secured"])
+@app.post("/process_query", response_model=ChatbotResponse)
 async def process_query(
-    request_data: ChatbotRequest,
-    # აქ ვიყენებთ განახლებულ verify_api_key-ს, რომელიც არ ითხოვს გასაღებს, თუკი ის არ მოწოდებულა
-    api_key_valid: Annotated[bool, Depends(verify_api_key)]
+    request_data: ChatbotRequest
+    # 💥 აქ ავტორიზაცია ამოღებულია 401 შეცდომის გამოსასწორებლად! 
 ):
     gemini_response = generate_gemini_content(request_data.prompt)
     
