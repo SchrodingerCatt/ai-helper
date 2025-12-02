@@ -2,13 +2,19 @@
 fastapi
 uvicorn
 requests
-pydantic
+pydantic>=2.0
 pypdf
 python-dotenv
+
+# --- RAG და LangChain ბიბლიოთეკები ---
+# LangChain-ის ძირითადი ინსტრუმენტები
 langchain-core
-langchain-google-genai
 langchain-community
-# ChromaDB-ისთვის საჭირო დამოკიდებულებები (თუ არ ჩაიტვირთება, შესაძლოა დაგჭირდეთ)
-# pydantic<2
-# pydantic_settings
-# httpx
+langchain-google-genai
+
+# ტექსტის დამუშავება (ingest.py-სთვის)
+langchain-text-splitters 
+python-multipart 
+
+# --- ვექტორული ბაზა ---
+chromadb
