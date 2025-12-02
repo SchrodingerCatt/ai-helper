@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ka">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini ჩატბოტის ინტერფეისი</title>
+    <!-- Tailwind CSS-ის ჩართვა -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* ფონტის კონფიგურაცია ქართულისთვის */
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Georgian:wght@400;700&display=swap');
+        body {
+            font-family: 'Noto Sans Georgian', sans-serif;
+            background-color: #f4f7f9;
+        }
+        /* Custom scrollbar for chat history */
+        #chat-history::-webkit-scrollbar {
+            width: 8px;
+        }
+        #chat-history::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1; /* slate-300 */
+            border-radius: 4px;
+        }
+        #chat-history::-webkit-scrollbar-track {
+            background-color: #f1f5f9; /* slate-100 */
+        }
+        .user-message {
+            background-color: #10b981; /* emerald-500 */
+            color: white;
+        }
+        .ai-message {
+            background-color: #ffffff;
+            color: #1f2937; /* gray-800 */
+            border: 1px solid #e5e7eb; /* gray-200 */
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen antialiased">
+
+    <!-- მთავარი კონტეინერი -->
+    <div class="flex flex-col h-full max-w-4xl mx-auto w-full p-4">
+        
+        <!-- სათაური -->
+        <header class="text-center mb-6 py-3 border-b border-gray-300">
+            <h1 class="text-3xl font-bold text-gray-800">🤖 Gemini ჩატბოტი</h1>
+            <p class="text-sm text-gray-500 mt-1">დაკავშირებულია თქვენს FastAPI სერვერთან</p>
+        </header>
+
+        <!-- ჩატის ისტორია -->
+        <div id="chat-history" class="flex-grow overflow-y-auto space-y-4 p-4 mb-4 bg-white rounded-xl shadow-lg border border-gray-100">
+            <!-- მისასალმებელი შეტყობინება -->
+            <div class="flex justify-start">
+                <div class="ai-message p-3 rounded-t-xl rounded-br-xl max-w-xs md:max-w-md shadow">
+                    გამარჯობა! მე ვარ თქვენი ასისტენტი. მკითხეთ რაც გსურთ.
+                </div>
+            </div>
+        </div>
+
+        <!-- შეტყობინების შეყვანის ფორმა -->
+        <div class="flex-shrink-0">
+            <form id="chat-form" class="flex items-center space-x-3 p-4 bg-white rounded-xl shadow-2xl">
+                
+                <!-- შეყვანის ველი -->
+                <input
+                    type="text"
+                    id="user-prompt"
+                    placeholder="ჩაწერეთ თქვენი შეკითხვა აქ..."
+                    class="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition duration-150"
+                    required
+                />
+                
+                <!-- გაგზავნის ღილაკი -->
+                <button
+                    type="submit"
+                    id="send-button"
+                    class="px-6 py-3 bg-emerald-600 text-white font-semibold rounded-lg shadow-md hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition duration-150 flex items-center justify-center"
+                >
+                    <span id="button-text">გაგზავნა</span>
+                    <svg id="loading-spinner" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+            </form>
+        </div>
+
+        <!-- ფუტერის ინფორმაცია (API გასაღები) -->
+        <div class="text-xs text-gray-400 text-center mt-3">
+            <p>API Key (X-API-Key) გამოიყენება: <code class="bg-gray-200 px-1 rounded">Schrodinger15Shwbkh0020khld0607</code></p>
+            <p>გთხოვთ, გაითვალისწინოთ, რომ უსაფრთხოების მიზნით, ეს გასაღები არ უნდა იყოს ხილული ფრონტენდში პროდუქციულ გარემოში.</p>
+        </div>
+    </div>
+
+    <script>
+        // --- კონფიგურაცია ---
+        // მოთხოვნის გასაღები, რომელიც ემთხვევა თქვენს Python-ის 'LOCAL_API_KEY'-ს.
+        const LOCAL_API_KEY = "Schrodinger15Shwbkh0020khld0607"; 
+        
+        // ენდპოინტი, რომელსაც უკავშირდება.
+        // შეიცვალა ფარდობითი ბილიკიდან სრულ URL-ზე, რათა თავიდან ავიცილოთ 'Failed to fetch' შეცდომები
+        // როდესაც ბრაუზერი ცდილობს API-ს გამოძახებას არასწორ პორტზე/ჰოსტზე.
+        // დაუშვით, რომ FastAPI მუშაობს http://localhost:8080-ზე. შეცვალეთ ეს, თუ თქვენი პორტი განსხვავებულია!
+        const API_ENDPOINT = "http://localhost:8080/process_query"; 
+        
+        // გლობალური მომხმარებლის ID
+        const USER_ID = `user-${Math.random().toString(36).substring(2, 9)}`;
+
+        // DOM ელემენტები
+        const chatForm = document.getElementById('chat-form');
+        const userPromptInput = document.getElementById('user-prompt');
+        const chatHistory = document.getElementById('chat-history');
+        const sendButton = document.getElementById('send-button');
+        const buttonText = document.getElementById('button-text');
+        const loadingSpinner = document.getElementById('loading-spinner');
+
+        // --- დამხმარე ფუნქციები ---
+
+        /**
+         * ამატებს შეტყობინებას ჩატის ისტორიას.
+         * @param {string} message - შეტყობინების ტექსტი.
+         * @param {string} sender - გამგზავნი ('user' ან 'ai').
+         */
+        function addMessage(message, sender) {
+            const messageContainer = document.createElement('div');
+            const messageBubble = document.createElement('div');
+
+            // შეტყობინების კონტეინერის სტილიზაცია
+            messageContainer.className = sender === 'user' ? 'flex justify-end' : 'flex justify-start';
+            
+            // შეტყობინების ბაბლის სტილიზაცია
+            messageBubble.className = `${sender === 'user' ? 'user-message' : 'ai-message'} p-3 rounded-xl max-w-xs md:max-w-md shadow whitespace-pre-wrap`;
+            
+            // მომხმარებლის შეტყობინებების სპეციალური დამრგვალება
+            if (sender === 'user') {
+                messageBubble.classList.add('rounded-tr-none');
+            } else {
+                messageBubble.classList.add('rounded-tl-none');
+            }
+
+            messageBubble.innerText = message;
+            messageContainer.appendChild(messageBubble);
+            chatHistory.appendChild(messageContainer);
+            
+            // სქროლირება ბოლომდე
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        /**
+         * აჩვენებს/მალავს ჩატვირთვის ინდიკატორს და ბლოკავს ღილაკს.
+         * @param {boolean} isLoading - ჩატვირთვა მიმდინარეობს თუ არა.
+         */
+        function setLoadingState(isLoading) {
+            sendButton.disabled = isLoading;
+            if (isLoading) {
+                buttonText.classList.add('hidden');
+                loadingSpinner.classList.remove('hidden');
+                sendButton.classList.add('opacity-75', 'cursor-not-allowed');
+            } else {
+                buttonText.classList.remove('hidden');
+                loadingSpinner.classList.add('hidden');
+                sendButton.classList.remove('opacity-75', 'cursor-not-allowed');
+            }
+        }
+
+        // --- მთავარი ლოგიკა ---
+
+        /**
+         * ამუშავებს ფორმის გაგზავნას.
+         * @param {Event} event - ფორმის მოვლენა.
+         */
+        async function handleChatSubmit(event) {
+            event.preventDefault(); // ბრაუზერის ნაგულისხმევი გაგზავნის თავიდან აცილება
+
+            const prompt = userPromptInput.value.trim();
+            if (!prompt) return;
+
+            // 1. მომხმარებლის შეტყობინების ჩვენება
+            addMessage(prompt, 'user');
+            userPromptInput.value = ''; // ველის გასუფთავება
+            setLoadingState(true);
+
+            // 2. მოთხოვნის მონაცემები
+            const requestPayload = {
+                prompt: prompt,
+                user_id: USER_ID
+            };
+
+            // 3. API-ს გამოძახება
+            try {
+                // ცალკეული მოლოდინის ფუნქცია ექსპონენციალური უკან დახევით
+                const maxRetries = 3;
+                let apiResponse = null;
+
+                for (let attempt = 0; attempt < maxRetries; attempt++) {
+                    try {
+                        const response = await fetch(API_ENDPOINT, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-API-Key': LOCAL_API_KEY // ავტორიზაციის გასაღები
+                            },
+                            body: JSON.stringify(requestPayload)
+                        });
+                        
+                        if (!response.ok) {
+                             // თუ HTTP სტატუსი არ არის წარმატებული (მაგ. 401, 500), 
+                             // ვცდით ხელახლა მხოლოდ იმ შემთხვევაში, თუ ეს 5xx შეცდომაა (სერვერის შეცდომა).
+                             // 4xx შეცდომები (როგორიცაა 401) დაუყოვნებლივ უნდა დავბრუნოთ.
+                             if (response.status >= 500 && attempt < maxRetries - 1) {
+                                throw new Error('Retryable Server Error');
+                             }
+
+                             const errorDetails = await response.json();
+                             throw new Error(`API შეცდომა: ${response.status} - ${errorDetails.detail || 'სერვერის შეცდომა'}`);
+                        }
+
+                        apiResponse = await response.json();
+                        break; // წარმატებული მოთხოვნა, გავდივართ ციკლიდან
+
+                    } catch (e) {
+                        if (e.message === 'Retryable Server Error' && attempt < maxRetries - 1) {
+                            const waitTime = Math.pow(2, attempt) * 1000;
+                            await new Promise(resolve => setTimeout(resolve, waitTime));
+                            // გაგრძელება შემდეგი ცდით
+                        } else if (attempt === maxRetries - 1) {
+                            // ბოლო ცდაზე, დავაგდოთ შეცდომა
+                            throw e;
+                        } else {
+                            // არახელახალი ცდის შეცდომა
+                            throw e;
+                        }
+                    }
+                }
+                
+                if (!apiResponse) {
+                     throw new Error('პასუხი ვერ მიიღეს განმეორებითი ცდების შემდეგ.');
+                }
+
+                // 4. AI პასუხის ჩვენება
+                if (apiResponse.status === 'success') {
+                    addMessage(apiResponse.ai_response, 'ai');
+                } else {
+                    addMessage(`შეცდომა AI-სგან: ${apiResponse.ai_response || 'პასუხი ვერ მიიღეს.'}`, 'ai');
+                }
+
+            } catch (error) {
+                console.error("Fetch შეცდომა:", error);
+                addMessage(`❌ ბოდიში, კავშირი შეწყდა: ${error.message}`, 'ai');
+            } finally {
+                setLoadingState(false);
+            }
+        }
+
+        // მოვლენის მსმენელის მიმაგრება
+        chatForm.addEventListener('submit', handleChatSubmit);
+
+    </script>
+</body>
+</html>
